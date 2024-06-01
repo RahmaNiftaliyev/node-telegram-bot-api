@@ -2248,14 +2248,14 @@ class TelegramBot extends EventEmitter {
    * Requires administrator rights in the chat
    *
    * @param  {Number|String} chatId  Unique identifier for the group/channel
-   * @param  {Number} user_id Unique identifier of the target user
+   * @param  {Number} userId Unique identifier of the target user
    * @param  {Object} [options] Additional Telegram query options
    * @return {Promise} On success, returns a [UserChatBoosts](https://core.telegram.org/bots/api#userchatboosts) object
    * @see https://core.telegram.org/bots/api#getuserchatboosts
    */
-  getUserChatBoosts(chatId, pollId, form = {}) {
+  getUserChatBoosts(chatId, userId, form = {}) {
     form.chat_id = chatId;
-    form.message_id = pollId;
+    form.user_id = userId;
     return this._request('getUserChatBoosts', { form });
   }
 
@@ -3023,6 +3023,21 @@ class TelegramBot extends EventEmitter {
     form.pre_checkout_query_id = preCheckoutQueryId;
     form.ok = ok;
     return this._request('answerPreCheckoutQuery', { form });
+  }
+
+  /**
+   * Use this method for refund a successful payment in [Telegram Stars](https://t.me/BotNews/90)
+   *
+   * @param  {Number} userId  Unique identifier of the user whose payment will be refunded
+   * @param  {String} telegramPaymentChargeId Telegram payment identifier
+   * @param  {Object} [options] Additional Telegram query options
+   * @return {Promise} On success, True is returned
+   * @see https://core.telegram.org/bots/api#refundstarpayment
+   */
+  refundStarPayment(userId, telegramPaymentChargeId, form = {}) {
+    form.user_id = userId;
+    form.telegram_payment_charge_id = telegramPaymentChargeId;
+    return this._request('refundStarPayment', { form });
   }
 
   /**
