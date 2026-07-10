@@ -634,6 +634,7 @@ so tracing stays a no-op.
 | Param | Type |
 | --- | --- |
 | `fields` | Record<string, WireValue> |
+| `streaming` | boolean |
 
 **Returns:** Promise<[EncodedRequest](#encodedrequest)>
 
@@ -650,11 +651,9 @@ Build a `FormPart` from a serialized JSON string and the files its refs point at
 
 ### `fromPath()`
 
-Read `path` off disk and wrap it as an `InputFile`. The default filename is the
-path's basename; pass `meta.filename` / `meta.contentType` to override.
-
-`readFile` returns a `Buffer`, which is a `Uint8Array` - accepted by `InputFile`
-directly, no copy.
+Wrap the file at `path` as an `InputFile`, streaming it from disk where the
+runtime allows. The default filename is the path's basename; pass
+`meta.filename` / `meta.contentType` to override.
 
 | Param | Type |
 | --- | --- |
@@ -662,16 +661,6 @@ directly, no copy.
 | `meta?` | { contentType?: string; filename?: string } |
 
 **Returns:** Promise<[InputFile](#inputfile)>
-
-### `inputFileToBlob()`
-
-Normalize any `InputFile.data` into a `Blob` for `FormData`.
-
-| Param | Type |
-| --- | --- |
-| `file` | [InputFile](#inputfile) |
-
-**Returns:** Promise<Blob>
 
 ### `isAbortError()`
 
@@ -875,8 +864,9 @@ Subset of Telegram's `ResponseParameters` carried on API errors.
 
 | Property | Type |
 | --- | --- |
-| `body` | URLSearchParams \| FormData |
+| `body` | () => Blob \| ReadableStream<Uint8Array<ArrayBufferLike>> \| URLSearchParams |
 | `headers` | Record<string, string> |
+| `replayable` | boolean |
 
 ### `FormPart`
 
@@ -4047,20 +4037,11 @@ type InputContactMessageContent = {
 
 ### `InputFileData`
 
-Files & the form-part contract (ADR-006, ADR-011).
-
-`InputFile` is the one value that cannot be JSON-serialized (you can't encode a
-`Blob`), so it has its own path: a multipart part. It wraps
-web-standard data only - no `fs`, no path-guessing - so uploads work on Node,
-Bun, Deno and the edge. File-bearing params are typed `InputFile | string`,
-where a string is always a `file_id` or URL and goes on the wire as-is.
-
-`FormPart` is the escape hatch for composites that carry files referenced
-from inside a JSON structure (`sendMediaGroup`, sticker sets, profile photos,
-story content). `serializeParams` produces one - the already-serialized JSON
-string plus the keyed parts its `attach://` refs point at - and the encoder
-sets the string under the field name and attaches each part. The encoder still
-stringifies nothing.
+The bytes behind an `InputFile`. All three stream into the request without
+being buffered. A `Blob` (e.g. a disk-backed one from `fromPath`) or a
+`Uint8Array` can be re-read, so transport retries stay possible; a
+`ReadableStream` is one-shot - it is sent exactly once and a failure
+surfaces immediately instead of retrying.
 
 ```ts
 type InputFileData = Blob | Uint8Array | ReadableStream<Uint8Array>;

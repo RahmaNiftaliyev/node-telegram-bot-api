@@ -15,6 +15,13 @@
  * stringifies nothing.
  */
 
+/**
+ * The bytes behind an `InputFile`. All three stream into the request without
+ * being buffered. A `Blob` (e.g. a disk-backed one from `fromPath`) or a
+ * `Uint8Array` can be re-read, so transport retries stay possible; a
+ * `ReadableStream` is one-shot - it is sent exactly once and a failure
+ * surfaces immediately instead of retrying.
+ */
 export type InputFileData = Blob | Uint8Array | ReadableStream<Uint8Array>;
 
 export interface InputFileMeta {
@@ -69,21 +76,4 @@ export function isFormPart(value: unknown): value is FormPart {
 /** Build a `FormPart` from a serialized JSON string and the files its refs point at. */
 export function formPart(json: string, files: ReadonlyArray<readonly [string, InputFile]>): FormPart {
   return { __formPart: true, json, files };
-}
-
-/** Normalize any `InputFile.data` into a `Blob` for `FormData`. */
-export async function inputFileToBlob(file: InputFile): Promise<Blob> {
-  const { data, meta } = file;
-  const type = meta?.contentType;
-  if (data instanceof Blob) {
-    // Re-wrap (rather than slice) to override the content type, if requested.
-    return type ? new Blob([data], { type }) : data;
-  }
-  if (data instanceof Uint8Array) {
-    // Cast away the `ArrayBufferLike` generic (Blob wants `Uint8Array<ArrayBuffer>`).
-    return new Blob([data as Uint8Array<ArrayBuffer>], type ? { type } : undefined);
-  }
-  // ReadableStream<Uint8Array>
-  const blob = await new Response(data).blob();
-  return type ? new Blob([blob], { type }) : blob;
 }
