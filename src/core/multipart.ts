@@ -150,8 +150,9 @@ let requestStreamsSupported: boolean | undefined;
  *
  * Bun is excluded by name, not by probe: its `fetch` accepts a stream body but
  * the request then stalls forever against an HTTPS origin (verified on Bun
- * 1.3.x - the same bytes sent as a plain body succeed), which no local probe
- * can detect. Revisit when Bun's streaming uploads are reliable.
+ * 1.3.x - the same bytes sent as a plain body succeed, and plain-HTTP targets
+ * work), which no local probe can detect. Remove the guard when
+ * https://github.com/oven-sh/bun/issues/33918 is fixed.
  */
 export function supportsRequestStreams(): boolean {
   if (requestStreamsSupported === undefined) {
