@@ -150,24 +150,33 @@ function proxyConfigured(env: Record<string, string | undefined> | undefined): b
 }
 
 /**
+ * Bun < 1.4.0 never writes a `ReadableStream` fetch body when the connection
+ * goes through an HTTP(S) CONNECT proxy: the headers flush, the body is never
+ * pulled, and the request hangs until timeout (oven-sh/bun#33918; fixed by
+ * oven-sh/bun#32635, first shipped in 1.4.0 - verified on canary through the
+ * same proxy that stalled). Bun picks the proxy up from the env automatically,
+ * so an affected proxied Bun must take the buffered fallback. A backported
+ * 1.3.x fix would be buffered too - conservative, never wrong. Read via
+ * `Bun.env`/`Bun.version` (not `process`) so core stays free of Node globals.
+ */
+function bunStreamBodyBroken(bun: { version?: string; env?: Record<string, string | undefined> }): boolean {
+  const [major = 0, minor = 0] = (bun.version ?? "0.0.0").split(".").map(Number);
+  if (major > 1 || (major === 1 && minor >= 4)) return false;
+  return proxyConfigured(bun.env);
+}
+
+/**
  * Once-per-process probe: can this runtime's `fetch` send a `ReadableStream`
  * request body? Where bodies must be buffered ahead of time the probe `Request`
  * either throws or stringifies the stream (marking itself with a `text/plain`
  * content-type). Node's undici additionally refuses a stream body unless
- * `duplex: "half"` is present.
- *
- * Bun needs one check no local probe can see: its `fetch` streams request
- * bodies fine on a direct connection, but a stream body routed through an
- * HTTP(S) CONNECT proxy stalls forever (verified on Bun 1.3.x: the same bytes
- * as a plain body succeed through the same proxy, and Bun honors the proxy env
- * vars automatically) - https://github.com/oven-sh/bun/issues/33918. So a
- * proxy-configured Bun buffers; remove the guard when the issue is fixed.
- * Read via `Bun.env` (not `process`) so the core stays free of Node globals.
+ * `duplex: "half"` is present. Bun needs the version/proxy check above, which
+ * no local probe can see (its probe passes and direct connections work).
  */
 export function supportsRequestStreams(): boolean {
   if (requestStreamsSupported === undefined) {
-    const bun = (globalThis as { Bun?: { env?: Record<string, string | undefined> } }).Bun;
-    if (bun !== undefined && proxyConfigured(bun.env)) {
+    const bun = (globalThis as { Bun?: { version?: string; env?: Record<string, string | undefined> } }).Bun;
+    if (bun !== undefined && bunStreamBodyBroken(bun)) {
       requestStreamsSupported = false;
       return requestStreamsSupported;
     }
