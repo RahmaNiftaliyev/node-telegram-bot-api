@@ -85,6 +85,52 @@ describe("multipart", () => {
     assert.strictEqual(await drain(pieces), await drain(pieces));
   });
 
+  test("a stream factory stays replayable: each body build opens a fresh stream", async () => {
+    let opens = 0;
+    const factory = () => {
+      opens += 1;
+      return new ReadableStream<Uint8Array>({
+        start(c) {
+          c.enqueue(new TextEncoder().encode("fresh"));
+          c.close();
+        },
+      });
+    };
+    const { pieces, replayable } = multipartBody([], [["video", new InputFile(factory)]]);
+    assert.strictEqual(replayable, true);
+    const first = await drain(pieces);
+    const second = await drain(pieces);
+    assert.strictEqual(first, second);
+    assert.ok(first.includes("\r\n\r\nfresh\r\n"));
+    assert.strictEqual(opens, 2);
+  });
+
+  test("a hostile meta.contentType cannot inject part headers", async () => {
+    const file = new InputFile(new Uint8Array([1]), { contentType: 'image/png\r\nX-Evil: 1\r\n\r\nforged"' });
+    const text = await drain(multipartBody([], [["photo", file]]).pieces);
+    assert.ok(!text.includes("X-Evil"), "CR/LF in a content type must not become a header");
+    assert.ok(text.includes("Content-Type: application/octet-stream"));
+  });
+
+  test("encoding is lazy: the source is not read until the body is consumed", async () => {
+    let pulls = 0;
+    const source = new ReadableStream<Uint8Array>(
+      {
+        pull(c) {
+          pulls += 1;
+          c.enqueue(new TextEncoder().encode("late"));
+          c.close();
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    const { pieces } = multipartBody([["chat_id", "1"]], [["video", new InputFile(source)]]);
+    const body = streamBody(pieces);
+    assert.strictEqual(pulls, 0, "building the body must not read the upload");
+    assert.ok((await new Response(body).text()).includes("late"));
+    assert.strictEqual(pulls, 1);
+  });
+
   test("bufferBody yields the same bytes as streaming", async () => {
     const { pieces } = multipartBody([["a", "b"]], [["f", new InputFile(new Uint8Array([9, 8, 7]))]]);
     const blob = await bufferBody(pieces);

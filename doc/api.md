@@ -4037,14 +4037,23 @@ type InputContactMessageContent = {
 
 ### `InputFileData`
 
-The bytes behind an `InputFile`. All three stream into the request without
-being buffered. A `Blob` (e.g. a disk-backed one from `fromPath`) or a
-`Uint8Array` can be re-read, so transport retries stay possible; a
-`ReadableStream` is one-shot - it is sent exactly once and a failure
-surfaces immediately instead of retrying.
+The bytes behind an `InputFile`. Every variant streams into the request
+without being buffered. A `Blob` (e.g. a disk-backed one from `fromPath`),
+a `Uint8Array`, or a stream factory can be re-read, so transport retries
+stay possible; a bare `ReadableStream` is one-shot - it is sent exactly
+once and a failure surfaces immediately instead of retrying.
 
 ```ts
-type InputFileData = Blob | Uint8Array | ReadableStream<Uint8Array>;
+type InputFileData = Blob | Uint8Array | ReadableStream<Uint8Array> | [InputFileStreamFactory](#inputfilestreamfactory);
+```
+
+### `InputFileStreamFactory`
+
+A replayable stream source: return a fresh, unread stream on every call.
+The upload stays retryable - each send attempt opens a new stream.
+
+```ts
+type InputFileStreamFactory = () => ReadableStream<Uint8Array> | Promise<ReadableStream<Uint8Array>>;
 ```
 
 ### `InputInvoiceMessageContent`

@@ -31,7 +31,8 @@ export interface EncodedRequest {
   /**
    * Whether `body()` may be called again for a retry. False only when a
    * one-shot `ReadableStream`-backed `InputFile` makes a second send
-   * impossible; `Blob`/`Uint8Array` data re-streams for free.
+   * impossible; `Blob`/`Uint8Array` data re-streams for free, and a stream
+   * factory (`InputFileStreamFactory`) opens a fresh stream per attempt.
    */
   replayable: boolean;
 }

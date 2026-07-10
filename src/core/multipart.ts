@@ -16,10 +16,11 @@
  * get the same bytes buffered into a single `Blob` instead.
  */
 
-import type { InputFile } from "./files.js";
+import type { InputFile, InputFileStreamFactory } from "./files.js";
 
-/** One sendable piece of a multipart body, in wire order. */
-export type BodyPiece = Uint8Array | Blob | ReadableStream<Uint8Array>;
+/** One sendable piece of a multipart body, in wire order. A factory piece is
+ *  invoked per body build, which is what keeps it replayable. */
+export type BodyPiece = Uint8Array | Blob | ReadableStream<Uint8Array> | InputFileStreamFactory;
 
 export interface MultipartBody {
   boundary: string;
@@ -42,6 +43,12 @@ function randomBoundary(): string {
 /** Escape a part name / filename per the WHATWG multipart serialization rules. */
 function escapeHeaderValue(value: string): string {
   return value.replace(/\r/g, "%0D").replace(/\n/g, "%0A").replace(/"/g, "%22");
+}
+
+/** A part content type is emitted into a multipart header verbatim; refuse a
+ *  CR/LF so a hostile `meta.contentType` cannot inject headers or forge parts. */
+function safeContentType(value: string): string {
+  return value.includes("\r") || value.includes("\n") ? "application/octet-stream" : value;
 }
 
 /**
@@ -68,7 +75,7 @@ export function multipartBody(
   for (const [name, file] of files) {
     const filename = escapeHeaderValue(file.meta?.filename ?? name);
     const blobType = file.data instanceof Blob ? file.data.type : "";
-    const contentType = file.meta?.contentType ?? (blobType || "application/octet-stream");
+    const contentType = safeContentType(file.meta?.contentType ?? (blobType || "application/octet-stream"));
     pieces.push(
       enc.encode(
         `--${boundary}\r\nContent-Disposition: form-data; name="${escapeHeaderValue(name)}"; ` +
@@ -84,14 +91,15 @@ export function multipartBody(
   return { boundary, pieces, replayable };
 }
 
-/** Walk the pieces in order, yielding raw chunks (a Blob streams from its store). */
+/** Walk the pieces in order, yielding raw chunks (a Blob streams from its
+ *  store; a factory opens a fresh stream for this build). */
 async function* pieceChunks(pieces: ReadonlyArray<BodyPiece>): AsyncGenerator<Uint8Array, void, undefined> {
   for (const piece of pieces) {
     if (piece instanceof Uint8Array) {
       yield piece;
       continue;
     }
-    const stream = piece instanceof Blob ? piece.stream() : piece;
+    const stream = typeof piece === "function" ? await piece() : piece instanceof Blob ? piece.stream() : piece;
     const reader = stream.getReader();
     let finished = false;
     try {

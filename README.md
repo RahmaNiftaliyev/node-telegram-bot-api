@@ -134,7 +134,16 @@ what Telegram sees (`fromPath` uses the basename).
 Uploads stream: bytes flow from their source straight into the request, so memory stays
 flat no matter the file size (`fromPath` opens a disk-backed `Blob`). A `Blob` or
 `Uint8Array` upload is re-streamed if the transport retries; a `ReadableStream` is
-one-shot - it is sent once and a failure surfaces immediately instead of retrying.
+one-shot - it is sent once and a failure surfaces immediately instead of retrying. To
+keep retries for an arbitrary stream source, pass a factory that returns a fresh stream:
+
+```ts
+// replayable streaming upload: the factory opens a new stream per attempt
+await bot.api.sendVideo({
+  chat_id,
+  video: new InputFile(() => openVideoStream(), { filename: "video.mp4", contentType: "video/mp4" }),
+});
+```
 
 ```ts
 import { Bot, InputFile, MediaGroupBuilder } from "node-telegram-bot-api";

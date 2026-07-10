@@ -218,6 +218,35 @@ describe("Transport", () => {
     assert.ok(texts[0]!.includes("ABCDE"));
   });
 
+  test("a stream-factory upload retries: each attempt opens a fresh stream", async () => {
+    let calls = 0;
+    let opens = 0;
+    const bodies: string[] = [];
+    const flakyFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      calls += 1;
+      bodies.push(await new Response(init?.body as ConstructorParameters<typeof Response>[0]).text());
+      if (calls === 1) return new Response("upstream error", { status: 502 });
+      return new Response(JSON.stringify({ ok: true, result: true }));
+    }) as unknown as typeof fetch;
+    const factory = () => {
+      opens += 1;
+      return new ReadableStream<Uint8Array>({
+        start(c) {
+          c.enqueue(new TextEncoder().encode("retryable bytes"));
+          c.close();
+        },
+      });
+    };
+    const tr = new Transport(TOKEN, { fetch: flakyFetch, maxRetries: 2, retryBackoffMs: 0 });
+    const result = await tr.request<boolean>("sendPhoto", { chat_id: 1, photo: new InputFile(factory) });
+    assert.strictEqual(result, true);
+    assert.strictEqual(calls, 2);
+    // Streaming: one fresh stream per attempt. Buffered fallback (e.g. Bun):
+    // the factory is drained once into the replayable Blob.
+    assert.strictEqual(opens, supportsRequestStreams() ? 2 : 1);
+    assert.ok(bodies.every((b) => b.includes("retryable bytes")));
+  });
+
   test("a one-shot streamed upload is never retried (the body cannot be replayed)", { skip: !supportsRequestStreams() }, async () => {
     // A caller-provided ReadableStream is consumed by the first send; instead of
     // retrying with an empty/broken body, the failure surfaces immediately.
