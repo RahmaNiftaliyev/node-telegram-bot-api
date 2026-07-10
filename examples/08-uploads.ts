@@ -30,9 +30,26 @@ if (chatId !== 0) {
     caption: "Sent from memory",
   });
 
-  // 2) A replayable streaming upload: the factory opens a fresh stream per
-  //    attempt, so transport retries still work - use it for any large source
-  //    you can re-read (disk, object storage, an HTTP re-request, ...).
+  // 2) Proxy a remote file: fetch it and stream the response body straight
+  //    into the upload - the bytes are never buffered, and because it is a
+  //    factory, a transport retry simply re-fetches the source. (For a public
+  //    URL you can also just pass the string, like the photo below; proxy the
+  //    bytes yourself when the source needs auth headers or exceeds Telegram's
+  //    URL-download size limits.)
+  const remoteVideo = async () => {
+    const res = await fetch("https://telegram.org/example/video.mp4");
+    if (!res.ok || !res.body) throw new Error(`source fetch failed: ${res.status}`);
+    return res.body;
+  };
+  await bot.api.sendVideo({
+    chat_id: chatId,
+    video: new InputFile(remoteVideo, { filename: "video.mp4", contentType: "video/mp4" }),
+    caption: "Fetched and streamed through",
+  });
+
+  // 3) A replayable streaming upload from any source: the factory opens a
+  //    fresh stream per attempt, so transport retries still work - use it for
+  //    any large source you can re-read (disk, object storage, ...).
   const openStream = () =>
     new ReadableStream<Uint8Array>({
       start(controller) {
@@ -46,23 +63,24 @@ if (chatId !== 0) {
     caption: "Streamed via a factory",
   });
 
-  // 3) A photo by URL (a plain string is a file_id or URL, sent as-is).
+  // 4) A photo by URL (a plain string is a file_id or URL, sent as-is).
   await bot.api.sendPhoto({
     chat_id: chatId,
     photo: "https://picsum.photos/seed/ntba/600/400",
     caption: "Sent by URL",
   });
 
-  // 4) A file from disk via `fromPath` (uncomment once you have a real path):
+  // 5) A file from disk via `fromPath` (uncomment once you have a real path):
   //    const local = await fromPath("./avatar.png");
   //    await bot.api.sendPhoto({ chat_id: chatId, photo: local });
   void fromPath; // referenced so the import is exercised in the example
 
-  // 5) An album. `new MediaGroupBuilder().build()` mints attach:// refs for any InputFile.
+  // 6) An album. `new MediaGroupBuilder().build()` mints attach:// refs for any InputFile.
+  const logo = await fetch("https://telegram.org/img/t_logo.png");
   const album = new MediaGroupBuilder()
     .photo({ media: "https://picsum.photos/seed/a/400", caption: "First" })
     .photo({ media: "https://picsum.photos/seed/b/400" })
-    .photo({ media: new InputFile(bytes, { filename: "note.txt" }) }) // mixes uploads + URLs freely
+    .photo({ media: new InputFile(logo.body!, { filename: "logo.png" }) }) // mixes uploads + URLs freely
     .build();
   await bot.api.sendMediaGroup({ chat_id: chatId, media: album });
 
