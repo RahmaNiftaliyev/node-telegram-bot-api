@@ -651,9 +651,9 @@ Build a `FormPart` from a serialized JSON string and the files its refs point at
 
 ### `fromPath()`
 
-Wrap the file at `path` as an `InputFile`, streaming it from disk where the
-runtime allows. The default filename is the path's basename; pass
-`meta.filename` / `meta.contentType` to override.
+Wrap the file at `path` as an `InputFile` that streams from disk, reopening
+the file for each transport retry. The default filename is the path's
+basename; pass `meta.filename` / `meta.contentType` to override.
 
 | Param | Type |
 | --- | --- |

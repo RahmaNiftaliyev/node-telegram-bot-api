@@ -5,27 +5,28 @@
  * data only (no `fs`, no path-guessing), so reading from disk lives here, under
  * the one folder allowed to import `node:*`.
  *
- * Prefers `fs.openAsBlob` (Node >= 19.8, Bun, Deno): a disk-backed `Blob` whose
- * bytes stream from disk during the send, so upload memory stays flat no matter
- * the file size, and a retry can re-read it. Runtimes without it fall back to
- * reading the whole file into memory (`readFile` returns a `Buffer`, which is a
- * `Uint8Array` - accepted by `InputFile` directly, no copy).
+ * The file is wrapped as a stream factory (`InputFileStreamFactory`): each send
+ * attempt opens a fresh `createReadStream`, so bytes stream from disk (memory
+ * stays flat no matter the file size) and the upload stays retryable. A factory
+ * beats `fs.openAsBlob` here: Node's disk-backed Blob is lazy, but Deno's
+ * node-compat `openAsBlob` reads the whole file into memory eagerly.
  */
 
-import * as fs from "node:fs";
-import { readFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
 import { basename } from "node:path";
+import { Readable } from "node:stream";
 import { InputFile } from "../core/files.js";
 
 /**
- * Wrap the file at `path` as an `InputFile`, streaming it from disk where the
- * runtime allows. The default filename is the path's basename; pass
- * `meta.filename` / `meta.contentType` to override.
+ * Wrap the file at `path` as an `InputFile` that streams from disk, reopening
+ * the file for each transport retry. The default filename is the path's
+ * basename; pass `meta.filename` / `meta.contentType` to override.
  */
 export async function fromPath(path: string, meta?: { filename?: string; contentType?: string }): Promise<InputFile> {
-  // Feature-detected (not a named import: that would throw at load on Node < 19.8).
-  const data = typeof fs.openAsBlob === "function" ? await fs.openAsBlob(path) : await readFile(path);
-  return new InputFile(data, {
+  await stat(path); // surface a missing/unreadable path here, not mid-request
+  const open = () => Readable.toWeb(createReadStream(path)) as ReadableStream<Uint8Array>;
+  return new InputFile(open, {
     filename: meta?.filename ?? basename(path),
     contentType: meta?.contentType,
   });
