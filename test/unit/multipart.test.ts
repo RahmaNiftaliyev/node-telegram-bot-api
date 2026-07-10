@@ -12,9 +12,16 @@ async function drain(pieces: Parameters<typeof streamBody>[0]): Promise<string> 
 }
 
 describe("multipart", () => {
-  test("request-stream support: true on Node, false on Bun (fetch stream bodies stall there)", () => {
-    const isBun = (globalThis as { Bun?: unknown }).Bun !== undefined;
-    assert.strictEqual(supportsRequestStreams(), !isBun);
+  test("request-stream support: true everywhere except Bun behind a proxy (stream bodies stall there)", () => {
+    // Bun's fetch streams fine on a direct connection but stalls through an
+    // HTTP(S) CONNECT proxy, which it picks up from the env automatically
+    // (oven-sh/bun#33918) - so the expectation depends on this run's env.
+    const bun = (globalThis as { Bun?: { env?: Record<string, string | undefined> } }).Bun;
+    const env = bun?.env ?? {};
+    const proxied = Boolean(
+      env.HTTPS_PROXY ?? env.https_proxy ?? env.HTTP_PROXY ?? env.http_proxy ?? env.ALL_PROXY ?? env.all_proxy,
+    );
+    assert.strictEqual(supportsRequestStreams(), !(bun !== undefined && proxied));
   });
 
   test("layout: text fields, then file parts, then the closing boundary", async () => {

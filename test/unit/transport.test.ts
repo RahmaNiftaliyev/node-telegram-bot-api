@@ -189,7 +189,7 @@ describe("Transport", () => {
       assert.ok(init?.body instanceof ReadableStream);
       assert.strictEqual((init as { duplex?: string }).duplex, "half");
     } else {
-      // e.g. Bun: the buffered-Blob fallback, sent without a duplex member.
+      // e.g. proxied Bun: the buffered-Blob fallback, without a duplex member.
       assert.ok(init?.body instanceof Blob);
       assert.strictEqual((init as { duplex?: string }).duplex, undefined);
     }

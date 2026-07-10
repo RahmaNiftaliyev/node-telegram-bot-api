@@ -141,6 +141,14 @@ export async function bufferBody(pieces: ReadonlyArray<BodyPiece>): Promise<Blob
 
 let requestStreamsSupported: boolean | undefined;
 
+/** The proxy env vars Bun's `fetch` honors automatically. */
+function proxyConfigured(env: Record<string, string | undefined> | undefined): boolean {
+  if (!env) return false;
+  return Boolean(
+    env.HTTPS_PROXY ?? env.https_proxy ?? env.HTTP_PROXY ?? env.http_proxy ?? env.ALL_PROXY ?? env.all_proxy,
+  );
+}
+
 /**
  * Once-per-process probe: can this runtime's `fetch` send a `ReadableStream`
  * request body? Where bodies must be buffered ahead of time the probe `Request`
@@ -148,15 +156,18 @@ let requestStreamsSupported: boolean | undefined;
  * content-type). Node's undici additionally refuses a stream body unless
  * `duplex: "half"` is present.
  *
- * Bun is excluded by name, not by probe: its `fetch` accepts a stream body but
- * the request then stalls forever against an HTTPS origin (verified on Bun
- * 1.3.x - the same bytes sent as a plain body succeed, and plain-HTTP targets
- * work), which no local probe can detect. Remove the guard when
- * https://github.com/oven-sh/bun/issues/33918 is fixed.
+ * Bun needs one check no local probe can see: its `fetch` streams request
+ * bodies fine on a direct connection, but a stream body routed through an
+ * HTTP(S) CONNECT proxy stalls forever (verified on Bun 1.3.x: the same bytes
+ * as a plain body succeed through the same proxy, and Bun honors the proxy env
+ * vars automatically) - https://github.com/oven-sh/bun/issues/33918. So a
+ * proxy-configured Bun buffers; remove the guard when the issue is fixed.
+ * Read via `Bun.env` (not `process`) so the core stays free of Node globals.
  */
 export function supportsRequestStreams(): boolean {
   if (requestStreamsSupported === undefined) {
-    if ((globalThis as { Bun?: unknown }).Bun !== undefined) {
+    const bun = (globalThis as { Bun?: { env?: Record<string, string | undefined> } }).Bun;
+    if (bun !== undefined && proxyConfigured(bun.env)) {
       requestStreamsSupported = false;
       return requestStreamsSupported;
     }
