@@ -13,8 +13,13 @@ version: "{build}"
 # optionalDependency package (@esbuild/win32-x64), not from its postinstall.
 # Node 21+ only: `test:node:unit` passes the `test/unit/*.test.ts` glob to
 # `node --test`, which Windows shells do not expand and Node only globs itself
-# since v21. Node 20 would receive the literal pattern and find no tests. This
-# matches the Actions matrix (22/24/26).
+# since v21. Node 20 would receive the literal pattern and find no tests.
+#
+# Single Node version, deliberately no matrix: this job exists for Windows
+# coverage only - the Node version matrix (22/24/26) is Actions' job. The free
+# AppVeyor plan runs 1 concurrent job, so a matrix serializes (each entry pays
+# its own VM provision on top of the shared queue wait) and roughly triples the
+# wall-clock for zero extra signal. Keep one LTS line.
 #
 # `image`: the default AppVeyor image is Windows Server 2012 R2, on which Node 24
 # refuses to run ("supported on Windows 10 / Server 2016 or higher"). Pin the
@@ -22,11 +27,11 @@ version: "{build}"
 image: Visual Studio 2022
 
 environment:
-  matrix:
-    - nodejs_version: "22"
-    - nodejs_version: "24"
+  nodejs_version: "24"
 
 platform: x64
+
+clone_depth: 1
 
 install:
   - ps: Install-Product node $env:nodejs_version x64
