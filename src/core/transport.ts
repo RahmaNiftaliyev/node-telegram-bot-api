@@ -29,7 +29,7 @@ export interface TransportOptions {
   apiRoot?: string;
   /** Injected fetch implementation. Default `globalThis.fetch`. */
   fetch?: typeof fetch;
-  /** Per-request client timeout in ms for ordinary calls; `0` disables. Default 30000. */
+  /** Per-request client timeout in ms for ordinary calls; `0` disables. Default 300000 (5 min). */
   timeoutMs?: number;
   /** Max retries on 429 and transient (network/timeout/5xx) failures. Default 2. */
   maxRetries?: number;
@@ -51,7 +51,9 @@ type ApiResponse<R> =
   | { ok: false; error_code: number; description: string; parameters?: ApiErrorParameters };
 
 const DEFAULT_API_ROOT = "https://api.telegram.org";
-const DEFAULT_TIMEOUT = 30_000;
+// Generous enough that a large upload on a slow link is not cut off mid-stream;
+// pass timeoutMs to tighten it for latency-sensitive bots.
+const DEFAULT_TIMEOUT = 300_000;
 const DEFAULT_MAX_RETRIES = 2;
 const DEFAULT_RETRY_BACKOFF = 300;
 const DEFAULT_MAX_RETRY_AFTER = 60_000;
